@@ -44,8 +44,20 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * This class manages the authentication tokens
+ */
 public class JWTManager {
     private static final String module = JWTManager.class.getName();
+
+        /**
+     * Get the authentication token based for user
+     * This takes OOTB username/password and if user is authenticated it will generate JJWT token using secreate key
+     *
+     * @param request - the http request in which the authentication token is searched and stored
+     * @return the authentication token
+     */
+
     public static String getAuthenticationToken(HttpServletRequest request, HttpServletResponse response){
         LocalDispatcher dispatcher = (LocalDispatcher) request.getAttribute("dispatcher");
         Delegator delegator = (Delegator) request.getAttribute("delegator");
@@ -79,7 +91,7 @@ public class JWTManager {
         }
         GenericValue userLogin = (GenericValue) result.get("userLogin");
 
-        String token = generateToken(delegator, UtilMisc.toMap("userLoginId", userLogin.getString("userLoginId")));
+        String token = createJwt (delegator, UtilMisc.toMap("userLoginId", userLogin.getString("userLoginId")));
         if (token == null) {
             Debug.logError("Unable to generate token", module);
             request.setAttribute("_ERROR_MESSAGE_", "Unable to generate token");
@@ -88,6 +100,16 @@ public class JWTManager {
         request.setAttribute("token",token);
         return "success";
     }
+
+    /* This method will be used to validate token,
+     * If token is vlalid it will get the claims and return
+     * If token validation failed it will return error
+     *
+     * @param delegator
+     * @param token
+     * @param types  List of string that will be extracted from token claims if found
+     * @param result  Map of name, value pairs composing the result
+     */
     public static Map<String, Object> validateToken(Delegator delegator, String token, List<String> types) {
         Map<String, Object> result = new HashMap<String, Object>();
         if (UtilValidate.isEmpty(token)) {
@@ -115,30 +137,34 @@ public class JWTManager {
             return result;
         }
     }
-    public static String generateToken(Delegator delegator, Map<String, String> tokenMap) {
-        return generateToken(delegator, tokenMap, null);
+
+    public static String createJwt(Delegator delegator, Map<String, String> tokenMap) {
+        int expirationTime = Integer.parseInt(EntityUtilProperties.getPropertyValue("security", "security.jwt.token.expireTime", "1800",  delegator));
+        return createJwt(delegator, tokenMap, expirationTime);
     }
-    public static String generateToken(Delegator delegator, Map<String, String> tokenMap, String expireInDaysStr) {
+
+    /* Generate and return a JWT key
+     *
+     * @param delegator
+     * @param tokenMap Map name, value pairs to set as claims
+     * @param expirationtime the expiration time in seconds
+     * @return a JWT token
+     */
+    public static String createJwt (Delegator delegator, Map<String, String> claims, int expireTime) {
         String key = EntityUtilProperties.getPropertyValue("security", "security.token.key", "ofbiz", delegator);
 
-        int expireInDays = 1;
-        if (UtilValidate.isEmpty(expireInDaysStr)) {
-            expireInDays = Integer.parseInt(EntityUtilProperties.getPropertyValue("security", "security.token.expireInDays", "1",  delegator));
-        }
         Calendar cal = Calendar.getInstance();
         cal.setTimeInMillis(UtilDateTime.nowTimestamp().getTime());
-        cal.add(Calendar.DAY_OF_YEAR, expireInDays);
+        cal.add(Calendar.SECOND, expireTime);
 
         JwtBuilder builder = Jwts.builder()
                 .setExpiration(cal.getTime())
                 .setIssuedAt(UtilDateTime.nowTimestamp())
                 .signWith(SignatureAlgorithm.HS512, key);
 
-        for (Map.Entry<String, String> entry : tokenMap.entrySet()) {
+        for (Map.Entry<String, String> entry : claims.entrySet()) {
             builder.claim(entry.getKey(), entry.getValue());
         }
-
         return builder.compact();
     }
-
 }
