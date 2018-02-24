@@ -50,7 +50,7 @@ import java.util.Map;
 public class JWTManager {
     private static final String module = JWTManager.class.getName();
 
-        /**
+     /**
      * Get the authentication token based for user
      * This takes OOTB username/password and if user is authenticated it will generate JJWT token using secreate key
      *
